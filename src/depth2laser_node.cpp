@@ -45,6 +45,10 @@ tf::StampedTransform xtion2laser;
 //Other
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 bool gotInfo=false;
+//Laser
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#define LASER_BUFFER_ELEMS 5000
+float laser_buffer[LASER_BUFFER_ELEMS];
 //=====================================================================
 
 
@@ -127,6 +131,7 @@ void frameCallback(const sensor_msgs::Image::ConstPtr& frame)
     int scan_points=0;
     float minx=0;
     float miny=0;
+
     float maxx=0;
     float maxy=0;
     geometry_msgs::Point32 point;
@@ -159,23 +164,49 @@ void frameCallback(const sensor_msgs::Image::ConstPtr& frame)
                     point.y=worldPoint[1];
                     point.z=worldPoint[2];
                     if(worldPoint[1]<miny){
-                        minx=worldPoint[0];
                         miny=worldPoint[1];
-                    }else
-                        if(worldPoint[1]>maxy){
-                            maxx=worldPoint[0];
-                            maxy=worldPoint[1];
-                        }
-                    scan.intensities.push_back(sqrt(pow(minx=worldPoint[0],2)+pow(minx=worldPoint[1],2)));
+                        minx=worldPoint[0];
+                    }
+                    if(worldPoint[1]>maxy){
+                        maxy=worldPoint[1];
+                        maxx=worldPoint[0];
+                    }
+                    //scan.intensities.push_back(sqrt(pow(minx=worldPoint[0],2)+pow(minx=worldPoint[1],2)));
                     laser.points.push_back(point);
                 }
             }
         }
 
     }
-    scan.angle_min=atan(miny/minx);
-    scan.angle_max=atan(maxy/maxx);
-    std::cout<< "MIN "<<scan.angle_min<<" MAX "<<scan.angle_max<<" INC"<<(scan.angle_max-scan.angle_min)/(float)scan_points<<" PTS"<<scan_points<<std::endl;
+    //scan.angle_min=atan(miny/minx);
+    //scan.angle_max=atan(maxy/maxx);
+    scan.header.stamp=ros::Time::now();
+    scan.angle_min=-M_PI;
+    scan.angle_max=M_PI;
+    scan.range_min=0;
+    scan.range_max=20.0f;
+    scan.angle_increment=2*M_PI/LASER_BUFFER_ELEMS;
+    //laser
+    //memset(laser_buffer,0,4*LASER_BUFFER_ELEMS);
+    for(int i = 0;i<LASER_BUFFER_ELEMS;i++){
+        laser_buffer[i]=INFINITY;
+    }
+    for(int i=0;i<laser.points.size();i++){
+        float x = laser.points.at(i).x;
+        float y = laser.points.at(i).y;
+        float ro   = sqrt(pow(x,2)+pow(y,2));
+        //std::cout<<y<<" "<<x<<std::endl;
+        float teta = atan(y/x);
+        int angle_bin = (teta*LASER_BUFFER_ELEMS/(2*M_PI))+(LASER_BUFFER_ELEMS/2);
+        laser_buffer[angle_bin]=ro;
+
+    }
+    for(int i=0;i<LASER_BUFFER_ELEMS;i++){
+        scan.ranges.push_back(laser_buffer[i]);
+    }
+//    std::cout<< "MINY "<<miny<<"\tMAXY "<<maxy<<std::endl;
+//    std::cout<< "MINX "<<minx<<"\tMAXX "<<maxx<<std::endl;
+//    std::cout<< "MIN "<<scan.angle_min<<"\tMAX "<<scan.angle_max<<std::endl<<std::endl;
     xtion_pub.publish(cloud);
     laser_pub.publish(laser);
     scan_pub.publish(scan);
