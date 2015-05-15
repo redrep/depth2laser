@@ -13,7 +13,7 @@
 #include <stdio.h>
 #include <tf/transform_listener.h>
 #include <math.h>
-
+#include <string>
 //GLOBALS
 //=====================================================================
 
@@ -42,13 +42,35 @@ Eigen::Isometry3f laserTransfom;
 tf::TransformListener* listener;
 tf::StampedTransform xtion;
 tf::StampedTransform xtion2laser;
+
+using namespace std;
+
 //Other
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 bool gotInfo=false;
 //Laser
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#define LASER_BUFFER_ELEMS 5000
-float laser_buffer[LASER_BUFFER_ELEMS];
+//note 2048 is the beam limit for gmapping
+int LASER_BUFFER_ELEMS=2047;
+float laser_buffer[2047];
+//Configuration structure
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+struct configuration{
+    //TF STUFF
+    string base_frame;
+    string camera_frame;
+    string virtual_laser_frame;
+    //TOPICS
+    string depth_image_raw_subscribed_topic;
+    string depth_image_camera_info_subscribed_topic;
+    string pointcloud_published_topic;
+    string virtual_scan_pointcloud_topic;
+    string virtual_scan_topic;
+    //OPTIONS
+    int publish_pointcloud;
+    int publish_laser_pointcloud;
+    int laser_beams;
+} c;
 //=====================================================================
 
 
@@ -71,10 +93,10 @@ void infoCallback(const sensor_msgs::CameraInfo::ConstPtr& info)
     //TF
     //================================================================================
     ROS_INFO("waif for tf...");
-    listener->waitForTransform("/world","/xtion",ros::Time(0),ros::Duration(30));
-    listener->lookupTransform("/world", "/xtion",ros::Time(0), xtion);
-    listener->waitForTransform("/xtion","/laser",ros::Time(0),ros::Duration(30));
-    listener->lookupTransform("/xtion", "/laser",ros::Time(0), xtion2laser);
+    listener->waitForTransform(c.base_frame,c.camera_frame,ros::Time(0),ros::Duration(30));
+    listener->lookupTransform(c.base_frame, c.camera_frame,ros::Time(0), xtion);
+    listener->waitForTransform(c.camera_frame,c.virtual_laser_frame,ros::Time(0),ros::Duration(30));
+    listener->lookupTransform(c.camera_frame, c.virtual_laser_frame,ros::Time(0), xtion2laser);
     ROS_INFO("got");
     xtionTransfom.setIdentity();
     xtionTransfom.translation() << xtion.getOrigin().x(),xtion.getOrigin().y(),xtion.getOrigin().z();
@@ -83,7 +105,6 @@ void infoCallback(const sensor_msgs::CameraInfo::ConstPtr& info)
 
     laserTransfom.setIdentity();
     laserTransfom.translation() << xtion2laser.getOrigin().x(),xtion2laser.getOrigin().y(),xtion2laser.getOrigin().z();
-    std::cout<<"LASERT "<<laserTransfom.translation().transpose()<<std::endl;
     Eigen::Quaternionf l(xtion2laser.getRotation().getW(),xtion2laser.getRotation().getX(),xtion2laser.getRotation().getY(),xtion2laser.getRotation().getZ());
     laserTransfom.linear()=l.toRotationMatrix();
     //bringin the pointcloud into the XTION frame (not the optical one!)
@@ -105,10 +126,10 @@ void infoCallback(const sensor_msgs::CameraInfo::ConstPtr& info)
     //transforming the Z unit vector using the frame transform.
     rotator.setIdentity();
     planeCoeffs=rotator*planeCoeffs;
-    std::cout<<planeCoeffs.transpose()<<std::endl;
+    //std::cout<<planeCoeffs.transpose()<<std::endl;
     planePassingPoint.setZero();
     //planePassingPoint<<xtion2laser.getOrigin().x(),xtion2laser.getOrigin().y(),xtion2laser.getOrigin().z();
-    std::cout<<"POINT "<<planePassingPoint<<std::endl;
+    //std::cout<<"POINT "<<planePassingPoint<<std::endl;
     float d = -(planePassingPoint(0)*planeCoeffs(0)+
                 planePassingPoint(1)*planeCoeffs(1)+
                 planePassingPoint(2)*planeCoeffs(2));
@@ -155,9 +176,6 @@ void frameCallback(const sensor_msgs::Image::ConstPtr& frame)
                 point.x=worldPoint[0];
                 point.y=worldPoint[1];
                 point.z=worldPoint[2];
-                //laser.points.push_back(point);
-                //if((worldPoint(0)*plane(0)+worldPoint(1)*plane(1)+worldPoint(2)*plane(2)+plane(3))<=0.01f &&
-                //(worldPoint(0)*plane(0)+worldPoint(1)*plane(1)+worldPoint(2)*plane(2)+plane(3))>=-0.01f){
                 if(worldPoint[2]<=0.005f && worldPoint[2]>=-0.005f){
                     scan_points++;
                     point.x=worldPoint[0];
@@ -171,15 +189,12 @@ void frameCallback(const sensor_msgs::Image::ConstPtr& frame)
                         maxy=worldPoint[1];
                         maxx=worldPoint[0];
                     }
-                    //scan.intensities.push_back(sqrt(pow(minx=worldPoint[0],2)+pow(minx=worldPoint[1],2)));
                     laser.points.push_back(point);
                 }
             }
         }
 
     }
-    //scan.angle_min=atan(miny/minx);
-    //scan.angle_max=atan(maxy/maxx);
     scan.header.stamp=ros::Time::now();
     scan.angle_min=-M_PI;
     scan.angle_max=M_PI;
@@ -195,7 +210,6 @@ void frameCallback(const sensor_msgs::Image::ConstPtr& frame)
         float x = laser.points.at(i).x;
         float y = laser.points.at(i).y;
         float ro   = sqrt(pow(x,2)+pow(y,2));
-        //std::cout<<y<<" "<<x<<std::endl;
         float teta = atan(y/x);
         int angle_bin = (teta*LASER_BUFFER_ELEMS/(2*M_PI))+(LASER_BUFFER_ELEMS/2);
         laser_buffer[angle_bin]=ro;
@@ -204,36 +218,68 @@ void frameCallback(const sensor_msgs::Image::ConstPtr& frame)
     for(int i=0;i<LASER_BUFFER_ELEMS;i++){
         scan.ranges.push_back(laser_buffer[i]);
     }
-//    std::cout<< "MINY "<<miny<<"\tMAXY "<<maxy<<std::endl;
-//    std::cout<< "MINX "<<minx<<"\tMAXX "<<maxx<<std::endl;
-//    std::cout<< "MIN "<<scan.angle_min<<"\tMAX "<<scan.angle_max<<std::endl<<std::endl;
-    xtion_pub.publish(cloud);
-    laser_pub.publish(laser);
+    //std::cout<< "MINY "<<miny<<"\tMAXY "<<maxy<<std::endl;
+    //std::cout<< "MINX "<<minx<<"\tMAXX "<<maxx<<std::endl;
+    //std::cout<< "MIN "<<scan.angle_min<<"\tMAX "<<scan.angle_max<<std::endl<<std::endl;
+    if(c.publish_pointcloud){
+        xtion_pub.publish(cloud);
+    }
+    if(c.publish_laser_pointcloud){
+        laser_pub.publish(laser);
+    }
     scan_pub.publish(scan);
 }
 
+//Params echo
+//================================================================================
+void EchoParameters(){
+    printf("%s %s\n","_base_frame",c.base_frame.c_str());
+    printf("%s %s\n","_camera_frame",c.camera_frame.c_str());
+    printf("%s %s\n","_virtual_laser_frame",c.virtual_laser_frame.c_str());
+    printf("%s %s\n","_depth_image_raw_subscribed_topic",c.depth_image_raw_subscribed_topic.c_str());
+    printf("%s %s\n","_depth_image_camera_info_subscribed_topic",c.depth_image_camera_info_subscribed_topic.c_str());
+    printf("%s %s\n","_pointcloud_published_topic",c.pointcloud_published_topic.c_str());
+    printf("%s %s\n","_virtual_scan_pointcloud_topic",c.virtual_scan_pointcloud_topic.c_str());
+    printf("%s %s\n","_virtual_scan_topic",c.virtual_scan_topic.c_str());
+    printf("%s %d\n","_publish_pointcloud",c.publish_pointcloud);
+    printf("%s %d\n","_publish_laser_pointcloud",c.publish_laser_pointcloud);
+    printf("%s %d\n","_laser_beams",c.laser_beams);
+}
 
 //================================================================================
 //MAIN PROGRAM
 //================================================================================
 int main(int argc, char **argv){
     ros::init(argc, argv, "listener");
+    ros::NodeHandle n("~");
     listener= new tf::TransformListener();
+    //Getting and setting parameters
+    n.param<string>("base_frame", c.base_frame, "/world");
+    n.param<string>("camera_frame", c.camera_frame, "/xtion");
+    n.param<string>("virtual_laser_frame", c.virtual_laser_frame, "/laser");
+    n.param<string>("depth_image_raw_subscribed_topic", c.depth_image_raw_subscribed_topic, "/camera/depth/image_raw");
+    n.param<string>("depth_image_camera_info_subscribed_topic", c.depth_image_camera_info_subscribed_topic, "/camera/depth/camera_info");
+    n.param<string>("pointcloud_published_topic", c.pointcloud_published_topic, "/pointcloud");
+    n.param<string>("virtual_scan_pointcloud_topic", c.virtual_scan_pointcloud_topic, "/laser");
+    n.param<string>("virtual_scan_topic", c.virtual_scan_topic, "/scan");
+    n.param("publish_pointcloud", c.publish_pointcloud, 0);
+    n.param("publish_laser_pointcloud", c.publish_laser_pointcloud, 0);
+    n.param("laser_beams", c.laser_beams, 2047);
+    EchoParameters();
     //Messages headers for TF
     //================================================================================
-    cloud.header.frame_id="xtion";
-    laser.header.frame_id="laser";
-    scan.header.frame_id="laser";
-    ros::NodeHandle n;
+    cloud.header.frame_id=c.camera_frame;
+    laser.header.frame_id=c.virtual_laser_frame;
+    scan.header.frame_id=c.virtual_laser_frame;
     //Subscribers
     //================================================================================
-    frame_sub = n.subscribe("/camera/depth/image_raw", 1, frameCallback);
-    info_sub = n.subscribe("/camera/depth/camera_info", 1, infoCallback);
+    frame_sub = n.subscribe(c.depth_image_raw_subscribed_topic, 1, frameCallback);
+    info_sub = n.subscribe(c.depth_image_camera_info_subscribed_topic, 1, infoCallback);
     //Publishers
     //================================================================================
-    xtion_pub = n.advertise<sensor_msgs::PointCloud>("pointcloud", 1);
-    laser_pub = n.advertise<sensor_msgs::PointCloud>("laser", 1);
-    scan_pub = n.advertise<sensor_msgs::LaserScan>("scan", 1);
+    xtion_pub = n.advertise<sensor_msgs::PointCloud>(c.pointcloud_published_topic, 1);
+    laser_pub = n.advertise<sensor_msgs::PointCloud>(c.virtual_scan_pointcloud_topic, 1);
+    scan_pub = n.advertise<sensor_msgs::LaserScan>(c.virtual_scan_topic, 1);
     ros::spin();
 
     return 0;

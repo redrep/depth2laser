@@ -3,7 +3,8 @@
   <arg name="pi" value="3.14159265359" />
   <arg name="prefix" value="d2l_" />
   <node pkg="tf" type="static_transform_publisher" name="$(arg prefix)xtion_link" args="0 0 1  0 0 0 world xtion 1000" />  
-  <node pkg="tf" type="static_transform_publisher" name="$(arg prefix)laser_link" args="0 0 -0.3 0 -0.2 0 xtion laser 1000" />
+  <node pkg="tf" type="static_transform_publisher" name="$(arg prefix)laser_link" args="0 0 0 0 0 0 xtion laser 1000" />
+  <node pkg="depth2laser" type="depth2laser_node" name="depth2laser" output="screen"/>
 
 </launch>
 
