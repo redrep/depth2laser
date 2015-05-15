@@ -11,6 +11,8 @@ To launch the node and the static TF tree, just write
 
  `roslaunch depth2laser tree.launch `
  
+If you want to try it on a mobile robot fastest way is edit `tree.launch` and set a trasform between the camera frame ("xtion" in that file) and the base link frame.
+
 Available params with deaults:
 
 * _base_frame /world
