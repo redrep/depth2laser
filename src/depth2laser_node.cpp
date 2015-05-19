@@ -201,8 +201,7 @@ void frameCallback(const sensor_msgs::Image::ConstPtr& frame)
     scan.range_min=0;
     scan.range_max=20.0f;
     scan.angle_increment=2*M_PI/LASER_BUFFER_ELEMS;
-    //laser
-    //memset(laser_buffer,0,4*LASER_BUFFER_ELEMS);
+
     for(int i = 0;i<LASER_BUFFER_ELEMS;i++){
         laser_buffer[i]=INFINITY;
     }
@@ -218,9 +217,7 @@ void frameCallback(const sensor_msgs::Image::ConstPtr& frame)
     for(int i=0;i<LASER_BUFFER_ELEMS;i++){
         scan.ranges.push_back(laser_buffer[i]);
     }
-    //std::cout<< "MINY "<<miny<<"\tMAXY "<<maxy<<std::endl;
-    //std::cout<< "MINX "<<minx<<"\tMAXX "<<maxx<<std::endl;
-    //std::cout<< "MIN "<<scan.angle_min<<"\tMAX "<<scan.angle_max<<std::endl<<std::endl;
+
     if(c.publish_pointcloud){
         xtion_pub.publish(cloud);
     }
@@ -250,7 +247,7 @@ void EchoParameters(){
 //MAIN PROGRAM
 //================================================================================
 int main(int argc, char **argv){
-    ros::init(argc, argv, "listener");
+    ros::init(argc, argv, "depth2laser");
     ros::NodeHandle n("~");
     listener= new tf::TransformListener();
     //Getting and setting parameters
