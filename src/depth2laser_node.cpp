@@ -144,6 +144,7 @@ void infoCallback(const sensor_msgs::CameraInfo::ConstPtr& info)
 void frameCallback(const sensor_msgs::Image::ConstPtr& frame)
 {
     if(!gotInfo) return;
+    ros::Time current_time = ros::Time(0);
     //convert the image message to a standard opencv Mat.
     //NOTE: data is immutable, it's ok with that.
     cloud.points.clear();
@@ -195,7 +196,11 @@ void frameCallback(const sensor_msgs::Image::ConstPtr& frame)
         }
 
     }
-    scan.header.stamp=ros::Time::now();
+    //SETTING TIMINGS
+
+    cloud.header.stamp=current_time;
+    laser.header.stamp=current_time;
+    scan.header.stamp=current_time;
     scan.angle_min=-M_PI;
     scan.angle_max=M_PI;
     scan.range_min=0;

@@ -2,9 +2,12 @@
   <arg name="pi/2" value="1.5707963267948966" />
   <arg name="pi" value="3.14159265359" />
   <arg name="prefix" value="d2l_" />
-  <node pkg="tf" type="static_transform_publisher" name="$(arg prefix)xtion_link" args="0 0 1  0 0 0 world xtion 1000" />  
-  <node pkg="tf" type="static_transform_publisher" name="$(arg prefix)laser_link" args="0 0 0 0 0 0 xtion laser 1000" />
-  <node pkg="depth2laser" type="depth2laser_node" name="depth2laser" output="screen"/>
+  <node pkg="tf" type="static_transform_publisher" name="$(arg prefix)xtion_link" args="0 0 0.5  0 0 0 base_link xtion 1" />  
+  <node pkg="tf" type="static_transform_publisher" name="$(arg prefix)laser_link" args="0 0 0 0 0 0 xtion laser 1" />
+  <node pkg="depth2laser" type="depth2laser_node" name="depth2laser" output="screen">
+  	<param name="publish_pointcloud" value="1" type="int"/>
+	<param name="base_frame" value="base_link" type="string"/>
+  </node>
 
 </launch>
 
